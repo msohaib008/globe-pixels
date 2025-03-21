@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Dots } from "./Dots";
@@ -18,6 +19,8 @@ const Sphere = ({ radius = 6 }) => (
 );
 
 export default function Globe({ radius = 8, dotsOffset = 0 }) {
+  const [minZoom, setMinZoom] = useState(radius + 1.5);
+
   return (
     <Canvas camera={{ position: [0, 0, 15], near: 1, far: 50 }} style={{ width:"100vw", height: "95vh"}}>
       <ambientLight />

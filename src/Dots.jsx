@@ -109,30 +109,40 @@ export function Dots({ count = 1000000, radius = 6.2, dotRadius = 2.2 }) {
             </instancedMesh>
 
             {Object.entries(imageDots).map(([index, { x, y, z, texture }]) => {
-                texture.center.set(0.5, 0.5);
-                texture.flipY = false;
+    texture.center.set(0.5, 0.5);
+    texture.flipY = false;
 
-                // Calculate the normal vector (outward from sphere center)
-                const normal = new THREE.Vector3(x, y, z).normalize();
+    // Normalized position vector (pointing outward from sphere center)
+    const normal = new THREE.Vector3(x, y, z).normalize();
 
-                // Compute an appropriate "right" vector for alignment
-                const right = new THREE.Vector3().crossVectors(normal, new THREE.Vector3(0, 0, 0)).normalize();
+    // Compute a consistent "up" vector (use Y-axis as a base reference)
+    const up = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(normal.y) > 0.99) {
+        // If the normal is nearly parallel to the Y-axis, switch to Z-axis for stability
+        up.set(0, 0, 1);
+    }
 
-                // Compute an appropriate "up" vector to maintain flat orientation
-                const up = new THREE.Vector3().crossVectors(right, normal).normalize();
+    // Compute the right vector
+    const right = new THREE.Vector3().crossVectors(up, normal).normalize();
+    
+    // Recalculate the up vector to ensure correct orientation
+    const newUp = new THREE.Vector3().crossVectors(normal, right).normalize();
 
-                // Align the image to be **flat on the sphere** using quaternion rotation
-                const quaternion = new THREE.Quaternion().setFromRotationMatrix(
-                    new THREE.Matrix4().lookAt(normal, new THREE.Vector3(0, 0, 0), up)
-                );
+    // Align the image to be flat on the sphere using quaternion rotation
+    const quaternion = new THREE.Quaternion().setFromRotationMatrix(
+        new THREE.Matrix4().lookAt(normal, new THREE.Vector3(0, 0, 0), newUp)
+    );
 
-                return (
-                    <mesh key={index} position={[x, y, z]} quaternion={quaternion}>
-                        <planeGeometry attach="geometry" args={[dotRadius / 30, dotRadius / 30]} />
-                        <meshBasicMaterial attach="material" map={texture} side={THREE.DoubleSide} transparent />
-                    </mesh>
-                );
-            })}
+    const offset = 0.002; // Small offset to lift the image above the dot
+const adjustedPosition = new THREE.Vector3(x, y, z).addScaledVector(normal, offset);
+
+    return (
+        <mesh key={index} position={adjustedPosition.toArray()} quaternion={quaternion}>
+            <planeGeometry attach="geometry" args={[dotRadius / 100, dotRadius / 100]} />
+            <meshBasicMaterial attach="material" map={texture} side={THREE.DoubleSide} transparent />
+        </mesh>
+    );
+})}
 
         </>
     );
