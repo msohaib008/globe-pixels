@@ -2,3 +2,22 @@
   font-family: sans-serif;
   text-align: center;
 }
+
+.upload-button {
+  background-color: cadetblue;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  box-shadow: none;
+  border: 0;
+  font-weight: bold;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.2s, box-shadow 0.3s;
+}
+
+.upload-button:hover {
+  background-color: #4ca6a8; /* Slightly lighter shade of cadetblue */
+  /* transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); */
+}
