@@ -177,6 +177,7 @@ export const Dots = forwardRef(({ count = 1000000, radius = 6.2, dotRadius = 2.2
         }
       };
 
+      
     return (
         <>
             <instancedMesh ref={pixelef} args={[null, null, count]} onClick={handleDotEnlargeOnly}>
