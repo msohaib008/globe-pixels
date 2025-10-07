@@ -3,7 +3,7 @@ import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from "re
 import { useLoader, useThree } from "@react-three/fiber";
 
 import mapImage from "./assets/map.png";
-import { fetchManifest, addDotToManifest, saveManifest, imageUrlForDot } from "./lib/firebase";
+import { fetchManifest, addDotToManifest, saveManifest, uploadDotImage, imageUrlForDot } from "./lib/firebase-firestore-only";
 
 const centerVector = new THREE.Vector3(0, 0, 0);
 const tempObject = new THREE.Object3D();
@@ -47,7 +47,7 @@ const useClickOutside = (callback) => {
 	}, [callback]);
 };
 
-export const Dots = forwardRef(({ count = 1000000, radius = 6.2, dotRadius = 2.2, onImageSelected }, ref) => {
+export const Dots = forwardRef(({ count = 1000000, radius = 6.2, dotRadius = 2.2 }, ref) => {
 	const pixelef = useRef();
 	const internalRef = useRef();
 	const { gl, camera, controls, invalidate } = useThree();
@@ -142,23 +142,59 @@ export const Dots = forwardRef(({ count = 1000000, radius = 6.2, dotRadius = 2.2
 			const file = e.target.files[0];
 			if (!file) return;
 
-			// Call parent component to handle image selection
-			if (onImageSelected) {
-				onImageSelected({
-					dotId: dotIndex,
-					file: file
-				});
+			try {
+				const originalSizeKB = Math.round(file.size / 1024);
+				console.log(`📁 Selected file: ${file.name}, size: ${originalSizeKB}KB`);
+				
+				// Show user feedback for large files
+				if (file.size > 500 * 1024) {
+					console.log(`⚡ Large image detected (${originalSizeKB}KB), optimizing to 500KB...`);
+				}
+				
+				// Upload to Firestore (stores image as base64, optimizes to 500KB)
+				const imageUrl = await uploadDotImage(dotIndex, file);
+				const texture = new THREE.TextureLoader().load(imageUrl, () => invalidate());
+
+				const dotPosition = pixelef.current.userData.positions.find(p => p.id === dotIndex);
+				if (dotPosition) {
+					setImageDots(prev => ({
+						...prev,
+						[dotIndex]: { ...dotPosition, texture }
+					}));
+
+					// Update manifest in Firestore
+					const current = await fetchManifest();
+					const updated = addDotToManifest(current, dotIndex);
+					await saveManifest(updated);
+
+					const target = new THREE.Vector3(dotPosition.x, dotPosition.y, dotPosition.z);
+					const direction = target.clone().normalize();
+					const distance = 0.1; // Distance from dot
+					const newCameraPos = target.clone().add(direction.multiplyScalar(distance));
+
+					if (controls) {
+						controls.target.copy(target);
+						controls.update();
+					}
+
+					camera.position.copy(newCameraPos);
+					camera.lookAt(target);
+
+					setEnlargedDotIndex(dotIndex);
+					setTimeout(()=>{ setEnlargedDotIndex(null); }, 2000);
+				}
+			} catch (err) {
+				console.error('Upload failed:', err);
+				alert(`Upload failed: ${err.message}`);
 			}
 		};
 
 		fileInput.click();
 	};
 
-
 	useImperativeHandle(ref, () => ({
 		triggerDotClick: () => handleDotClick()
 	}));
-
 
 	const handleDotEnlargeOnly = (event) => {
 		const dotIndex = event?.instanceId;
@@ -175,7 +211,6 @@ export const Dots = forwardRef(({ count = 1000000, radius = 6.2, dotRadius = 2.2
 		}
 	  };
 
-	  
 	return (
 		<>
 			<instancedMesh ref={pixelef} args={[null, null, count]} onClick={handleDotEnlargeOnly}>
@@ -220,4 +255,4 @@ export const Dots = forwardRef(({ count = 1000000, radius = 6.2, dotRadius = 2.2
 			})}
 		</>
 	);
-}); 
+});

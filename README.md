@@ -1,12 +1,64 @@
-# React + Vite
+# Globe Pixels
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interactive 3D globe where users can upload images to dots. Images are stored in Firebase Storage and metadata is saved in Firestore.
 
-Currently, two official plugins are available:
+## Firebase Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### 1. Create a Firebase Project
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Create a new project or select an existing one
+3. Enable Firebase Storage and Firestore Database
 
-## Expanding the ESLint configuration
+### 2. Get Firebase Configuration
+1. In Firebase Console, go to Project Settings > General
+2. Scroll down to "Your apps" and click "Add app" > Web
+3. Copy the Firebase configuration object
 
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### 3. Environment Variables
+Create a `.env` file in your project root with the following variables:
+
+```
+VITE_FIREBASE_API_KEY=your_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+VITE_FIREBASE_APP_ID=your_app_id
+```
+
+### 4. Firebase Security Rules
+
+#### Firestore Rules
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /dots/{document} {
+      allow read, write: if true; // Adjust based on your security needs
+    }
+    match /manifest/{document} {
+      allow read, write: if true; // Adjust based on your security needs
+    }
+  }
+}
+```
+
+#### Storage Rules
+```javascript
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /dots/{allPaths=**} {
+      allow read, write: if true; // Adjust based on your security needs
+    }
+  }
+}
+```
+
+## How it Works
+
+- Users click on dots on the 3D globe to upload images
+- Images are stored in Firebase Storage under the `dots/` folder
+- Image metadata (URL, file info, timestamps) is saved in Firestore `dots` collection
+- A manifest of all uploaded dots is maintained in Firestore `manifest` collection
+- The app loads existing images from Firebase when the globe initializes
