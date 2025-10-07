@@ -146,7 +146,7 @@ export default function Globe({ radius = 8, dotsOffset = 0 }) {
           onClick={toggleBorders}
           style={{ marginLeft: "10px", backgroundColor: showBorders ? "#4ca6a8" : "#666" }}
         >
-          {showBorders ? "Hide" : "Show"} Country Borders
+          {showBorders ? "Hide" : "Show"} Country Border
         </button> */}
       </div>
       <Canvas camera={{ position: [0, 0, 15], near: 1, far: 50 }} style={{ width: "100vw", height: "95vh" }}>
