@@ -1,6 +1,6 @@
 // Pending images management for admin approval system
 import { getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { db } from './firebase.js';
+import { db, fetchManifest, saveManifest, addDotToManifest } from './firebase.js';
 
 const PENDING_COLLECTION = 'pending_images';
 const APPROVED_COLLECTION = 'dots';
@@ -116,14 +116,20 @@ export async function approveImage(dotId, adminNotes = '') {
     // Store in approved collection
     await setDoc(doc(db, APPROVED_COLLECTION, dotId.toString()), approvedData);
     
-    // Update pending document status
-    await updateDoc(doc(db, PENDING_COLLECTION, dotId.toString()), {
-      status: 'approved',
-      approvedAt: new Date().toISOString(),
-      adminNotes: adminNotes
-    });
+    // Update Firebase manifest to include the approved dot
+    try {
+      const manifest = await fetchManifest();
+      const updatedManifest = addDotToManifest(manifest, parseInt(dotId));
+      await saveManifest(updatedManifest);
+      console.log(`✅ Manifest updated with dot ${dotId}`);
+    } catch (manifestError) {
+      console.warn('Failed to update manifest:', manifestError);
+    }
     
-    console.log(`✅ Image approved: Dot ${dotId}`);
+    // Remove from pending collection (approved images should not stay in pending)
+    await deleteDoc(doc(db, PENDING_COLLECTION, dotId.toString()));
+    
+    console.log(`✅ Image approved and moved to approved collection: Dot ${dotId}`);
     
     return {
       success: true,
@@ -159,14 +165,10 @@ export async function rejectImage(dotId, reason = '') {
     
     const pendingData = pendingDoc.data();
     
-    // Update pending document status
-    await updateDoc(doc(db, PENDING_COLLECTION, dotId.toString()), {
-      status: 'rejected',
-      rejectedAt: new Date().toISOString(),
-      adminNotes: reason
-    });
+    // Remove from pending collection (rejected images should not stay in pending)
+    await deleteDoc(doc(db, PENDING_COLLECTION, dotId.toString()));
     
-    console.log(`❌ Image rejected: Dot ${dotId}`);
+    console.log(`❌ Image rejected and removed from pending: Dot ${dotId}`);
     
     return {
       success: true,
@@ -243,7 +245,93 @@ export async function deletePendingImage(dotId) {
 }
 
 /**
- * Get statistics about pending images
+ * Get all images (pending + approved) for admin panel
+ * @returns {Promise<Array>} - Array of all images with status
+ */
+export async function getAllImages() {
+  try {
+    const [pendingImages, approvedImages] = await Promise.all([
+      getPendingImages(),
+      getApprovedImages()
+    ]);
+    
+    // Combine all images and sort by date
+    const allImages = [
+      ...pendingImages.map(img => ({ ...img, collection: 'pending' })),
+      ...approvedImages.map(img => ({ ...img, collection: 'approved', status: 'approved' }))
+    ];
+    
+    // Sort by date (newest first)
+    allImages.sort((a, b) => new Date(b.submittedAt || b.createdAt) - new Date(a.submittedAt || a.createdAt));
+    
+    return allImages;
+    
+  } catch (error) {
+    console.error('Failed to get all images:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all approved images
+ * @returns {Promise<Array>} - Array of approved images
+ */
+export async function getApprovedImages() {
+  try {
+    const approvedSnapshot = await getDocs(collection(db, APPROVED_COLLECTION));
+    const approvedImages = [];
+    
+    approvedSnapshot.forEach((doc) => {
+      approvedImages.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    // Sort by approval date (newest first)
+    approvedImages.sort((a, b) => new Date(b.approvedAt || b.createdAt) - new Date(a.approvedAt || a.createdAt));
+    
+    return approvedImages;
+    
+  } catch (error) {
+    console.error('Failed to fetch approved images:', error);
+    return [];
+  }
+}
+
+/**
+ * Get statistics about all images
+ * @returns {Promise<Object>} - Statistics object
+ */
+export async function getAllImageStats() {
+  try {
+    const [pendingImages, approvedImages] = await Promise.all([
+      getPendingImages(),
+      getApprovedImages()
+    ]);
+    
+    const stats = {
+      total: pendingImages.length + approvedImages.length,
+      pending: pendingImages.length,
+      approved: approvedImages.length,
+      rejected: 0 // Rejected images are deleted, not stored
+    };
+    
+    return stats;
+    
+  } catch (error) {
+    console.error('Failed to get all image stats:', error);
+    return {
+      total: 0,
+      pending: 0,
+      approved: 0,
+      rejected: 0
+    };
+  }
+}
+
+/**
+ * Get statistics about pending images (legacy function for backward compatibility)
  * @returns {Promise<Object>} - Statistics object
  */
 export async function getPendingStats() {

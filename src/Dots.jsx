@@ -3,10 +3,19 @@ import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from "re
 import { useLoader, useThree } from "@react-three/fiber";
 
 import mapImage from "./assets/map.png";
-import { fetchManifest, addDotToManifest, saveManifest, imageUrlForDot } from "./lib/firebase";
+import { fetchManifest, addDotToManifest, saveManifest, imageUrlForDot, getAllDots } from "./lib/firebase";
 
 const centerVector = new THREE.Vector3(0, 0, 0);
 const tempObject = new THREE.Object3D();
+
+// Helper function to compare arrays
+const arraysEqual = (a, b) => {
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		if (a[i] !== b[i]) return false;
+	}
+	return true;
+};
 
 const getDistance = (circlePosition) => {
 	const distance = new THREE.Vector3();
@@ -83,31 +92,71 @@ export const Dots = forwardRef(({ count = 1000000, radius = 6.2, dotRadius = 2.2
 
 		pixelef.current.instanceMatrix.needsUpdate = true;
 		pixelef.current.userData.positions = positions; // Store positions for reference
+		
+		console.log(`🌍 Generated ${positions.length} valid dot positions`);
+		console.log(`📍 First few position IDs:`, positions.slice(0, 5).map(p => p.id));
+		console.log(`📍 Last few position IDs:`, positions.slice(-5).map(p => p.id));
+		console.log(`📍 All position IDs range: ${positions[0]?.id} to ${positions[positions.length - 1]?.id}`);
 
-		// Load manifest now that positions are ready
+		// Load all approved images now that positions are ready
 		(async () => {
-			const manifest = await fetchManifest(); // { dots: number[] }
-			if (!manifest || !Array.isArray(manifest.dots)) return;
-			const loader = new THREE.TextureLoader();
-			const next = {};
-			
-			for (const dotId of manifest.dots) {
-				const pos = positions.find(p => p.id === dotId);
-				if (!pos) continue;
+			try {
+				// Get all approved dots directly from the database
+				const approvedDots = await getAllDots();
+				console.log('📋 Approved dots loaded:', approvedDots.length);
 				
-				try {
-					const imageUrl = await imageUrlForDot(dotId);
-					if (imageUrl) {
-						next[dotId] = { 
-							...pos, 
-							texture: loader.load(imageUrl, () => invalidate()) 
-						};
-					}
-				} catch (error) {
-					console.warn(`Failed to load image for dot ${dotId}:`, error);
+				if (approvedDots.length === 0) {
+					console.log('⚠️ No approved dots found');
+					return;
 				}
+				
+				console.log(`🎯 Found ${approvedDots.length} approved dots:`, approvedDots.map(d => d.dotId));
+				
+				const loader = new THREE.TextureLoader();
+				const next = {};
+				
+				for (const dot of approvedDots) {
+					const dotId = parseInt(dot.dotId);
+					const pos = positions.find(p => p.id === dotId);
+					if (!pos) {
+						console.log(`❌ Position not found for dot ${dotId}`);
+						continue;
+					}
+					
+					try {
+						const imageUrl = await imageUrlForDot(dotId);
+						if (imageUrl) {
+							console.log(`✅ Loading image for dot ${dotId}`);
+							next[dotId] = { 
+								...pos, 
+								texture: loader.load(imageUrl, () => invalidate()) 
+							};
+						} else {
+							console.log(`❌ No image URL found for dot ${dotId}`);
+						}
+					} catch (error) {
+						console.warn(`Failed to load image for dot ${dotId}:`, error);
+					}
+				}
+				
+				console.log(`🎨 Setting ${Object.keys(next).length} image dots`);
+				setImageDots(prev => ({ ...prev, ...next }));
+				
+				// Also update manifest to keep it in sync
+				const manifest = await fetchManifest();
+				const manifestDotIds = manifest.dots || [];
+				const approvedDotIds = approvedDots.map(d => parseInt(d.dotId));
+				
+				// Check if manifest needs updating
+				const needsUpdate = !arraysEqual(manifestDotIds.sort(), approvedDotIds.sort());
+				if (needsUpdate) {
+					console.log('🔄 Updating manifest to match approved dots');
+					await saveManifest({ dots: approvedDotIds });
+				}
+				
+			} catch (error) {
+				console.error('Failed to load approved images:', error);
 			}
-			setImageDots(prev => ({ ...prev, ...next }));
 		})();
 	}, [mapElement, count, radius, invalidate]);
 
@@ -154,9 +203,88 @@ export const Dots = forwardRef(({ count = 1000000, radius = 6.2, dotRadius = 2.2
 		fileInput.click();
 	};
 
+	// Search and focus functionality
+	const searchAndFocusDot = (dotId) => {
+		console.log(`🔍 Searching for dot ${dotId}`);
+		console.log(`📊 Current imageDots state:`, Object.keys(imageDots).length, 'images loaded');
+		console.log(`📍 Available image dots:`, Object.keys(imageDots));
+		
+		const positions = pixelef.current?.userData?.positions;
+		if (!positions) {
+			console.log('❌ No positions available yet');
+			return false;
+		}
+
+		const dotPosition = positions.find(pos => pos.id === dotId);
+		if (!dotPosition) {
+			console.log(`❌ Position not found for dot ${dotId}`);
+			return false;
+		}
+
+		console.log(`✅ Found position for dot ${dotId}:`, dotPosition);
+
+		// Create a target position for the camera to look at
+		const targetPosition = new THREE.Vector3(dotPosition.x, dotPosition.y, dotPosition.z);
+		
+		// Calculate a good camera position (slightly offset from the dot)
+		const normal = targetPosition.clone().normalize();
+		const cameraDistance = radius * 1.5; // Distance from the globe surface
+		const cameraPosition = targetPosition.clone().add(normal.multiplyScalar(cameraDistance));
+		
+		// Animate camera to focus on the dot
+		if (controls) {
+			// Set target to the dot position
+			controls.target.copy(targetPosition);
+			
+			// Animate camera position
+			const startPosition = camera.position.clone();
+			const startTarget = controls.target.clone();
+			
+			const duration = 1000; // 1 second animation
+			const startTime = Date.now();
+			
+			const animate = () => {
+				const elapsed = Date.now() - startTime;
+				const progress = Math.min(elapsed / duration, 1);
+				
+				// Smooth easing function
+				const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+				const easedProgress = easeInOutCubic(progress);
+				
+				// Interpolate camera position
+				camera.position.lerpVectors(startPosition, cameraPosition, easedProgress);
+				controls.target.lerpVectors(startTarget, targetPosition, easedProgress);
+				
+				controls.update();
+				invalidate();
+				
+				if (progress < 1) {
+					requestAnimationFrame(animate);
+				}
+			};
+			
+			animate();
+		}
+
+		// Check if the dot has an image and enlarge it
+		console.log(`🖼️ Checking if dot ${dotId} has an image:`, !!imageDots[dotId]);
+		if (imageDots[dotId]) {
+			console.log(`✅ Enlarging dot ${dotId} with image`);
+			setEnlargedDotIndex(dotId);
+			// Auto-shrink after 3 seconds
+			setTimeout(() => {
+				setEnlargedDotIndex(null);
+			}, 30000);
+		} else {
+			console.log(`ℹ️ Dot ${dotId} found but has no image yet`);
+		}
+
+		return true;
+	};
 
 	useImperativeHandle(ref, () => ({
-		triggerDotClick: () => handleDotClick()
+		triggerDotClick: () => handleDotClick(),
+		searchAndFocusDot: (dotId) => searchAndFocusDot(dotId)
 	}));
 
 

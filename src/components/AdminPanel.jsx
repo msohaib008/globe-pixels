@@ -1,28 +1,29 @@
 import { useState, useEffect } from 'react';
-import { getPendingImages, approveImage, rejectImage, getPendingStats } from '../lib/pending-images';
+import { getAllImages, approveImage, rejectImage, getAllImageStats } from '../lib/pending-images';
 import { sendUserConfirmationEmail } from '../lib/email-service';
 
 export const AdminPanel = () => {
-  const [pendingImages, setPendingImages] = useState([]);
+  const [allImages, setAllImages] = useState([]);
   const [stats, setStats] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 });
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [adminNotes, setAdminNotes] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'pending', 'approved'
 
   useEffect(() => {
-    loadPendingImages();
+    loadAllImages();
   }, []);
 
-  const loadPendingImages = async () => {
+  const loadAllImages = async () => {
     try {
       setLoading(true);
-      const images = await getPendingImages();
-      const statistics = await getPendingStats();
+      const images = await getAllImages();
+      const statistics = await getAllImageStats();
       
-      setPendingImages(images);
+      setAllImages(images);
       setStats(statistics);
     } catch (error) {
-      console.error('Failed to load pending images:', error);
+      console.error('Failed to load all images:', error);
     } finally {
       setLoading(false);
     }
@@ -43,7 +44,7 @@ export const AdminPanel = () => {
         });
         
         // Reload data
-        await loadPendingImages();
+        await loadAllImages();
         
         alert(`✅ Image approved for dot ${dotId}`);
       } else {
@@ -72,7 +73,7 @@ export const AdminPanel = () => {
         });
         
         // Reload data
-        await loadPendingImages();
+        await loadAllImages();
         
         alert(`❌ Image rejected for dot ${dotId}`);
       } else {
@@ -98,6 +99,12 @@ export const AdminPanel = () => {
     return new Date(dateString).toLocaleString();
   };
 
+  // Filter images based on selected status
+  const filteredImages = allImages.filter(image => {
+    if (filterStatus === 'all') return true;
+    return image.status === filterStatus;
+  });
+
   if (loading) {
     return (
       <div className="admin-panel">
@@ -112,7 +119,7 @@ export const AdminPanel = () => {
   return (
     <div className="admin-panel">
       <div className="admin-header">
-        <h1>🛡️ Admin Panel - Image Approvals</h1>
+        <h1>🛡️ Admin Panel - All Images</h1>
         <div className="stats">
           <div className="stat-item">
             <span className="stat-number">{stats.total}</span>
@@ -131,6 +138,20 @@ export const AdminPanel = () => {
             <span className="stat-label">Rejected</span>
           </div>
         </div>
+        
+        {/* Filter Controls */}
+        <div className="filter-controls">
+          <label htmlFor="status-filter">Filter by status:</label>
+          <select
+            id="status-filter"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="all">All Images ({stats.total})</option>
+            <option value="pending">Pending Only ({stats.pending})</option>
+            <option value="approved">Approved Only ({stats.approved})</option>
+          </select>
+        </div>
       </div>
 
       <div className="admin-notes">
@@ -145,12 +166,12 @@ export const AdminPanel = () => {
       </div>
 
       <div className="pending-images">
-        {pendingImages.length === 0 ? (
+        {filteredImages.length === 0 ? (
           <div className="no-images">
-            <p>🎉 No pending images to review!</p>
+            <p>🎉 No images found for the selected filter!</p>
           </div>
         ) : (
-          pendingImages.map((image) => (
+          filteredImages.map((image) => (
             <div key={image.id} className={`image-card ${image.status}`}>
               <div className="image-preview">
                 <img 
@@ -180,8 +201,13 @@ export const AdminPanel = () => {
                   <strong>Size:</strong> {formatFileSize(image.fileSize)}
                 </div>
                 <div className="detail-row">
-                  <strong>Submitted:</strong> {formatDate(image.submittedAt)}
+                  <strong>Submitted:</strong> {formatDate(image.submittedAt || image.createdAt)}
                 </div>
+                {image.approvedAt && (
+                  <div className="detail-row">
+                    <strong>Approved:</strong> {formatDate(image.approvedAt)}
+                  </div>
+                )}
                 <div className="detail-row">
                   <strong>Status:</strong> 
                   <span className={`status-badge ${image.status}`}>
@@ -249,6 +275,36 @@ export const AdminPanel = () => {
         .admin-header h1 {
           color: #333;
           margin-bottom: 20px;
+        }
+
+        .filter-controls {
+          margin-top: 20px;
+          padding: 15px;
+          background: #f8f9fa;
+          border-radius: 8px;
+          border: 1px solid #dee2e6;
+        }
+
+        .filter-controls label {
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: #333;
+        }
+
+        .filter-controls select {
+          width: 100%;
+          padding: 8px 12px;
+          border: 2px solid #ddd;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+          cursor: pointer;
+        }
+
+        .filter-controls select:focus {
+          outline: none;
+          border-color: #007bff;
         }
 
         .stats {

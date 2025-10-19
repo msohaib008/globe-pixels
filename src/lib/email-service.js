@@ -3,10 +3,12 @@ import emailjs from '@emailjs/browser';
 
 // EmailJS configuration
 const EMAILJS_SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID;
-const EMAILJS_TEMPLATE_ID_ADMIN = import.meta.env.VITE_EMAILJS_TEMPLATE_ID_ADMIN || 'template_admin_approval';
-const EMAILJS_TEMPLATE_ID_USER = import.meta.env.VITE_EMAILJS_TEMPLATE_ID_USER || 'template_user_confirmation';
+const EMAILJS_TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID_ADMIN || 'template_simple';
+const EMAILJS_TEMPLATE_ID_USER = import.meta.env.VITE_EMAILJS_TEMPLATE_ID_USER || 'template_simple';
+
 const EMAILJS_PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
-const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'admin@yourdomain.com';
+const ADMIN_EMAIL = 'msohaib008@gmail.com';
+
 
 /**
  * Send email notification to admin about pending image approval
@@ -23,23 +25,33 @@ export async function sendAdminApprovalEmail(data) {
     
     // Check if EmailJS is configured
     if (EMAILJS_SERVICE_ID && EMAILJS_PUBLIC_KEY) {
+      // Create download link for the image
+      const downloadLink = `${window.location.origin}/api/download-image/${dotId}`;
+      
       const templateParams = {
         to_name: 'Admin',
         to_email: ADMIN_EMAIL,
         from_name: userEmail,
         from_email: userEmail,
-        dot_id: dotId,
-        file_name: fileName,
-        file_size: formatFileSize(fileSize),
-        admin_panel_url: getAdminUrl(),
-        approve_url: `${getAdminUrl()}/approve/${dotId}`,
-        reject_url: `${getAdminUrl()}/reject/${dotId}`,
-        message: `New image upload request from ${userEmail} for dot ${dotId}. File: ${fileName} (${formatFileSize(fileSize)}). Please review and approve or reject in the admin panel.`
+        message: `New image upload request from ${userEmail} for dot ${dotId}.
+
+File Details:
+- File Name: ${fileName}
+- File Size: ${formatFileSize(fileSize)}
+- Dot ID: ${dotId}
+
+Download Image: ${downloadLink}
+
+Admin Panel: ${getAdminUrl()}
+Approve: ${getAdminUrl()}/approve/${dotId}
+Reject: ${getAdminUrl()}/reject/${dotId}
+
+Please review and approve or reject in the admin panel.`
       };
       
       const result = await emailjs.send(
         EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID_ADMIN,
+        EMAILJS_TEMPLATE_ID,
         templateParams,
         EMAILJS_PUBLIC_KEY
       );
@@ -95,48 +107,39 @@ export async function sendUserConfirmationEmail(data) {
     
     // Check if EmailJS is configured
     if (EMAILJS_SERVICE_ID && EMAILJS_PUBLIC_KEY) {
-      let templateParams;
+      let message;
       
       switch (status) {
         case 'pending':
-          templateParams = {
-            to_name: userEmail.split('@')[0], // Use email username as name
-            to_email: userEmail,
-            from_name: 'Globe Pixels Admin',
-            from_email: ADMIN_EMAIL,
-            dot_id: dotId,
-            status: 'received',
-            message: `Thank you for uploading an image to dot ${dotId}! Your image is currently pending admin approval and will appear on the globe once approved. You will receive another email once your image has been reviewed.`,
-            globe_url: window.location.origin
-          };
+          message = `Thank you for uploading an image to dot ${dotId}! 
+
+Your image is currently pending admin approval and will appear on the globe once approved. You will receive another email once your image has been reviewed.
+
+Globe URL: ${window.location.origin}`;
           break;
           
         case 'approved':
-          templateParams = {
-            to_name: userEmail.split('@')[0],
-            to_email: userEmail,
-            from_name: 'Globe Pixels Admin',
-            from_email: ADMIN_EMAIL,
-            dot_id: dotId,
-            status: 'approved',
-            message: `Great news! Your image for dot ${dotId} has been approved and is now visible on the globe.`,
-            globe_url: window.location.origin
-          };
+          message = `Great news! Your image for dot ${dotId} has been approved and is now visible on the globe.
+
+You can view your image at: ${window.location.origin}`;
           break;
           
         case 'rejected':
-          templateParams = {
-            to_name: userEmail.split('@')[0],
-            to_email: userEmail,
-            from_name: 'Globe Pixels Admin',
-            from_email: ADMIN_EMAIL,
-            dot_id: dotId,
-            status: 'rejected',
-            message: `Unfortunately, your image for dot ${dotId} was not approved. Please ensure your image follows our guidelines and try uploading again.`,
-            globe_url: window.location.origin
-          };
+          message = `Unfortunately, your image for dot ${dotId} was not approved. 
+
+Please ensure your image follows our guidelines and try uploading again.
+
+Globe URL: ${window.location.origin}`;
           break;
       }
+      
+      const templateParams = {
+        to_name: userEmail.split('@')[0], // Use email username as name
+        to_email: userEmail,
+        from_name: 'Globe Pixels Admin',
+        from_email: ADMIN_EMAIL,
+        message: message
+      };
       
       const result = await emailjs.send(
         EMAILJS_SERVICE_ID,
