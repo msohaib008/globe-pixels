@@ -2,9 +2,9 @@ import { useState, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Dots } from "./Dots";
-import { CountryBordersGeo } from "./CountryBordersGeo";
+// import { CountryBordersGeo } from "./CountryBordersGeo";
 import { EmailModal } from "./components/EmailModal";
-import { SkyModel } from "./components/SkyModel";
+// import { SkyModel } from "./components/SkyModel";
 import { submitImageForApproval, getPendingImages } from "./lib/pending-images";
 import { sendAdminApprovalEmail, sendUserConfirmationEmail } from "./lib/email-service";
 import "./App.css";
@@ -351,9 +351,9 @@ The globe should now display your images!`);
       </div>
       <Canvas camera={{ position: [0, 0, 15], near: 1, far: 100 }} style={{ width: "100vw", height: "95vh" }}>
         {/* 3D Sky Model Background */}
-        <Suspense fallback={null}>
+        {/* <Suspense fallback={null}>
           <SkyModel />
-        </Suspense>
+        </Suspense> */}
         
         <ambientLight intensity={0.4} />
         <directionalLight position={[10, 10, 5]} intensity={0.6} castShadow />

@@ -3,7 +3,7 @@ import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 
 // Import the GLTF model from assets
-import skyModelUrl from '../assets/sky/scene.gltf';
+import skyModelUrl from '../assets/sky/scene.gltf?url';
 
 // Load the sky GLTF model
 function SkyModel() {
